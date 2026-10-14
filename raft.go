@@ -502,18 +502,18 @@ func (r *raft) hasLeader() bool { return r.lead != None }
 func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
 
 func (r *raft) hardState() *pb.HardState {
-	return &pb.HardState{
-		Term:   new(r.Term),
-		Vote:   new(r.Vote),
-		Commit: new(r.raftLog.committed),
-	}
+	m := &pb.HardState{}
+	m.SetTerm(r.Term)
+	m.SetVote(r.Vote)
+	m.SetCommit(r.raftLog.committed)
+	return m
 }
 
 // send schedules persisting state to a stable storage and AFTER that
 // sending the message (as part of next Ready message processing).
 func (r *raft) send(m *pb.Message) {
 	if m.GetFrom() == None {
-		m.From = new(r.id)
+		m.SetFrom(r.id)
 	}
 	if m.GetType() == pb.MsgVote || m.GetType() == pb.MsgVoteResp || m.GetType() == pb.MsgPreVote || m.GetType() == pb.MsgPreVoteResp {
 		if m.GetTerm() == 0 {
@@ -540,7 +540,7 @@ func (r *raft) send(m *pb.Message) {
 		// should be treated as local message.
 		// MsgReadIndex is also forwarded to leader.
 		if m.GetType() != pb.MsgProp && m.GetType() != pb.MsgReadIndex {
-			m.Term = new(r.Term)
+			m.SetTerm(r.Term)
 		}
 	}
 	if m.GetType() == pb.MsgAppResp || m.GetType() == pb.MsgVoteResp || m.GetType() == pb.MsgPreVoteResp {
@@ -648,14 +648,14 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 	}
 
 	// Send the actual MsgApp otherwise, and update the progress accordingly.
-	r.send(&pb.Message{
-		To:      new(to),
-		Type:    pb.MsgApp.Enum(),
-		Index:   new(prevIndex),
-		LogTerm: new(prevTerm),
-		Entries: ents,
-		Commit:  new(r.raftLog.committed),
-	})
+	m := &pb.Message{}
+	m.SetTo(to)
+	m.SetType(pb.MsgApp)
+	m.SetIndex(prevIndex)
+	m.SetLogTerm(prevTerm)
+	m.SetEntries(ents)
+	m.SetCommit(r.raftLog.committed)
+	r.send(m)
 	pr.SentEntries(len(ents), uint64(payloadsSize(ents)))
 	pr.SentCommit(r.raftLog.committed)
 	return true
@@ -686,7 +686,11 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 	pr.BecomeSnapshot(sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
-	r.send(&pb.Message{To: new(to), Type: pb.MsgSnap.Enum(), Snapshot: snapshot})
+	m := &pb.Message{}
+	m.SetTo(to)
+	m.SetType(pb.MsgSnap)
+	m.SetSnapshot(snapshot)
+	r.send(m)
 	return true
 }
 
@@ -700,12 +704,14 @@ func (r *raft) sendHeartbeat(to uint64, ctx []byte) {
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
 	commit := min(pr.Match, r.raftLog.committed)
-	r.send(&pb.Message{
-		To:      new(to),
-		Type:    pb.MsgHeartbeat.Enum(),
-		Commit:  new(commit),
-		Context: ctx,
-	})
+	m := &pb.Message{}
+	m.SetTo(to)
+	m.SetType(pb.MsgHeartbeat)
+	m.SetCommit(commit)
+	if ctx != nil {
+		m.SetContext(ctx)
+	}
+	r.send(m)
 	pr.SentCommit(commit)
 }
 
@@ -815,8 +821,8 @@ func (r *raft) appendEntry(es ...*pb.Entry) (accepted bool) {
 	for i := range es {
 		// TODO: Consider whether cloning/copying is necessary at all, and aim to eliminate it if possible.
 		cloned[i] = proto.Clone(es[i]).(*pb.Entry)
-		cloned[i].Term = new(r.Term)
-		cloned[i].Index = new(li + 1 + uint64(i))
+		cloned[i].SetTerm(r.Term)
+		cloned[i].SetIndex(li + 1 + uint64(i))
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(cloned) {
@@ -842,7 +848,11 @@ func (r *raft) appendEntry(es ...*pb.Entry) (accepted bool) {
 	//  if r.maybeCommit() {
 	//  	r.bcastAppend()
 	//  }
-	r.send(&pb.Message{To: new(r.id), Type: pb.MsgAppResp.Enum(), Index: new(li)})
+	m := &pb.Message{}
+	m.SetTo(r.id)
+	m.SetType(pb.MsgAppResp)
+	m.SetIndex(li)
+	r.send(m)
 	return true
 }
 
@@ -852,7 +862,10 @@ func (r *raft) tickElection() {
 
 	if r.promotable() && r.pastElectionTimeout() {
 		r.electionElapsed = 0
-		if err := r.Step(&pb.Message{From: new(r.id), Type: pb.MsgHup.Enum()}); err != nil {
+		m := &pb.Message{}
+		m.SetFrom(r.id)
+		m.SetType(pb.MsgHup)
+		if err := r.Step(m); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
 	}
@@ -866,7 +879,10 @@ func (r *raft) tickHeartbeat() {
 	if r.electionElapsed >= r.electionTimeout {
 		r.electionElapsed = 0
 		if r.checkQuorum {
-			if err := r.Step(&pb.Message{From: new(r.id), Type: pb.MsgCheckQuorum.Enum()}); err != nil {
+			m := &pb.Message{}
+			m.SetFrom(r.id)
+			m.SetType(pb.MsgCheckQuorum)
+			if err := r.Step(m); err != nil {
 				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 			}
 		}
@@ -882,7 +898,10 @@ func (r *raft) tickHeartbeat() {
 
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
-		if err := r.Step(&pb.Message{From: new(r.id), Type: pb.MsgBeat.Enum()}); err != nil {
+		m := &pb.Message{}
+		m.SetFrom(r.id)
+		m.SetType(pb.MsgBeat)
+		if err := r.Step(m); err != nil {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
 	}
@@ -958,7 +977,7 @@ func (r *raft) becomeLeader() {
 	r.pendingConfIndex = r.raftLog.lastIndex()
 
 	traceBecomeLeader(r)
-	emptyEnt := &pb.Entry{Data: nil}
+	emptyEnt := &pb.Entry{}
 	if !r.appendEntry(emptyEnt) {
 		// This won't happen because we just called reset() above.
 		r.logger.Panic("empty entry was dropped")
@@ -1056,7 +1075,11 @@ func (r *raft) campaign(t CampaignType) {
 			// send a MsgVote to itself). This response message will be added to
 			// msgsAfterAppend and delivered back to this node after the vote
 			// has been written to stable storage.
-			r.send(&pb.Message{To: new(id), Term: new(term), Type: voteRespMsgType(voteMsg).Enum()})
+			m := &pb.Message{}
+			m.SetTo(id)
+			m.SetTerm(term)
+			m.SetType(voteRespMsgType(voteMsg))
+			r.send(m)
 			continue
 		}
 		// TODO(pav-kv): it should be ok to simply print %+v for the lastEntryID.
@@ -1068,7 +1091,16 @@ func (r *raft) campaign(t CampaignType) {
 		if t == campaignTransfer {
 			ctx = []byte(t)
 		}
-		r.send(&pb.Message{To: new(id), Term: new(term), Type: voteMsg.Enum(), Index: new(last.index), LogTerm: new(last.term), Context: ctx})
+		m := &pb.Message{}
+		m.SetTo(id)
+		m.SetTerm(term)
+		m.SetType(voteMsg)
+		m.SetIndex(last.index)
+		m.SetLogTerm(last.term)
+		if ctx != nil {
+			m.SetContext(ctx)
+		}
+		r.send(m)
 	}
 }
 
@@ -1153,7 +1185,10 @@ func (r *raft) Step(m *pb.Message) error {
 			// with "pb.MsgAppResp" of higher term would force leader to step down.
 			// However, this disruption is inevitable to free this stuck node with
 			// fresh election. This can be prevented with Pre-Vote phase.
-			r.send(&pb.Message{To: m.From, Type: pb.MsgAppResp.Enum()})
+			resp := &pb.Message{}
+			resp.SetTo(m.GetFrom())
+			resp.SetType(pb.MsgAppResp)
+			r.send(resp)
 		} else if m.GetType() == pb.MsgPreVote {
 			// Before Pre-Vote enable, there may have candidate with higher term,
 			// but less log. After update to Pre-Vote, the cluster may deadlock if
@@ -1162,7 +1197,12 @@ func (r *raft) Step(m *pb.Message) error {
 			// TODO(pav-kv): it should be ok to simply print %+v of the lastEntryID.
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.GetType(), m.GetFrom(), m.GetLogTerm(), m.GetIndex(), r.Term)
-			r.send(&pb.Message{To: m.From, Term: new(r.Term), Type: pb.MsgPreVoteResp.Enum(), Reject: new(true)})
+			resp := &pb.Message{}
+			resp.SetTo(m.GetFrom())
+			resp.SetTerm(r.Term)
+			resp.SetType(pb.MsgPreVoteResp)
+			resp.SetReject(true)
+			r.send(resp)
 		} else if m.GetType() == pb.MsgStorageAppendResp {
 			if m.GetIndex() != 0 {
 				// Don't consider the appended log entries to be stable because
@@ -1249,7 +1289,11 @@ func (r *raft) Step(m *pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(&pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.GetType()).Enum()})
+			resp := &pb.Message{}
+			resp.SetTo(m.GetFrom())
+			resp.SetTerm(m.GetTerm())
+			resp.SetType(voteRespMsgType(m.GetType()))
+			r.send(resp)
 			if m.GetType() == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
@@ -1258,7 +1302,12 @@ func (r *raft) Step(m *pb.Message) error {
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.GetType(), m.GetFrom(), candLastID.term, candLastID.index, r.Term)
-			r.send(&pb.Message{To: m.From, Term: new(r.Term), Type: voteRespMsgType(m.GetType()).Enum(), Reject: new(true)})
+			resp := &pb.Message{}
+			resp.SetTo(m.GetFrom())
+			resp.SetTerm(r.Term)
+			resp.SetType(voteRespMsgType(m.GetType()))
+			resp.SetReject(true)
+			r.send(resp)
 		}
 
 	default:
@@ -1325,7 +1374,7 @@ func stepLeader(r *raft, m *pb.Message) error {
 			if cc != nil {
 				alreadyPending := r.pendingConfIndex > r.raftLog.applied
 				alreadyJoint := len(r.trk.Config.Voters[1]) > 0
-				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
+				wantsLeaveJoint := len(cc.AsV2().GetChanges()) == 0
 
 				var failedCheck string
 				if alreadyPending {
@@ -1338,7 +1387,9 @@ func stepLeader(r *raft, m *pb.Message) error {
 
 				if failedCheck != "" && !r.disableConfChangeValidation {
 					r.logger.Infof("%x ignoring conf change %s at config %s: %s", r.id, DescribeConfChange(cc), r.trk.Config, failedCheck)
-					m.GetEntries()[i] = &pb.Entry{Type: pb.EntryNormal.Enum()}
+					ent := &pb.Entry{}
+					ent.SetType(pb.EntryNormal)
+					m.GetEntries()[i] = ent
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
 					traceChangeConfEvent(cc, r)
@@ -1725,7 +1776,7 @@ func stepFollower(r *raft, m *pb.Message) error {
 			r.logger.Infof("%x not forwarding to leader %x at term %d; dropping proposal", r.id, r.lead, r.Term)
 			return ErrProposalDropped
 		}
-		m.To = new(r.lead)
+		m.SetTo(r.lead)
 		r.send(m)
 	case pb.MsgApp:
 		r.electionElapsed = 0
@@ -1744,7 +1795,7 @@ func stepFollower(r *raft, m *pb.Message) error {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
 			return nil
 		}
-		m.To = new(r.lead)
+		m.SetTo(r.lead)
 		r.send(m)
 	case pb.MsgForgetLeader:
 		if r.readOnly.option == ReadOnlyLeaseBased {
@@ -1766,7 +1817,7 @@ func stepFollower(r *raft, m *pb.Message) error {
 			r.logger.Infof("%x no leader at term %d; dropping index reading msg", r.id, r.Term)
 			return nil
 		}
-		m.To = new(r.lead)
+		m.SetTo(r.lead)
 		r.send(m)
 	case pb.MsgReadIndexResp:
 		if len(m.GetEntries()) != 1 {
@@ -1794,11 +1845,19 @@ func (r *raft) handleAppendEntries(m *pb.Message) {
 	a := logSliceFromMsgApp(m)
 
 	if a.prev.index < r.raftLog.committed {
-		r.send(&pb.Message{To: m.From, Type: pb.MsgAppResp.Enum(), Index: new(r.raftLog.committed)})
+		resp := &pb.Message{}
+		resp.SetTo(m.GetFrom())
+		resp.SetType(pb.MsgAppResp)
+		resp.SetIndex(r.raftLog.committed)
+		r.send(resp)
 		return
 	}
 	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.GetCommit()); ok {
-		r.send(&pb.Message{To: m.From, Type: pb.MsgAppResp.Enum(), Index: new(mlastIndex)})
+		resp := &pb.Message{}
+		resp.SetTo(m.GetFrom())
+		resp.SetType(pb.MsgAppResp)
+		resp.SetIndex(mlastIndex)
+		r.send(resp)
 		return
 	}
 	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
@@ -1822,19 +1881,25 @@ func (r *raft) handleAppendEntries(m *pb.Message) {
 	// LogTerm in this response in any case, so we don't verify it here.
 	hintIndex := min(m.GetIndex(), r.raftLog.lastIndex())
 	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.GetLogTerm())
-	r.send(&pb.Message{
-		To:         m.From,
-		Type:       pb.MsgAppResp.Enum(),
-		Index:      new(m.GetIndex()),
-		Reject:     new(true),
-		RejectHint: new(hintIndex),
-		LogTerm:    new(hintTerm),
-	})
+	resp := &pb.Message{}
+	resp.SetTo(m.GetFrom())
+	resp.SetType(pb.MsgAppResp)
+	resp.SetIndex(m.GetIndex())
+	resp.SetReject(true)
+	resp.SetRejectHint(hintIndex)
+	resp.SetLogTerm(hintTerm)
+	r.send(resp)
 }
 
 func (r *raft) handleHeartbeat(m *pb.Message) {
 	r.raftLog.commitTo(m.GetCommit())
-	r.send(&pb.Message{To: m.From, Type: pb.MsgHeartbeatResp.Enum(), Context: m.GetContext()})
+	resp := &pb.Message{}
+	resp.SetTo(m.GetFrom())
+	resp.SetType(pb.MsgHeartbeatResp)
+	if m.GetContext() != nil {
+		resp.SetContext(m.GetContext())
+	}
+	r.send(resp)
 }
 
 func (r *raft) handleSnapshot(m *pb.Message) {
@@ -1846,11 +1911,19 @@ func (r *raft) handleSnapshot(m *pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, sindex, sterm)
-		r.send(&pb.Message{To: m.From, Type: pb.MsgAppResp.Enum(), Index: new(r.raftLog.lastIndex())})
+		resp := &pb.Message{}
+		resp.SetTo(m.GetFrom())
+		resp.SetType(pb.MsgAppResp)
+		resp.SetIndex(r.raftLog.lastIndex())
+		r.send(resp)
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, sindex, sterm)
-		r.send(&pb.Message{To: m.From, Type: pb.MsgAppResp.Enum(), Index: new(r.raftLog.committed)})
+		resp := &pb.Message{}
+		resp.SetTo(m.GetFrom())
+		resp.SetType(pb.MsgAppResp)
+		resp.SetIndex(r.raftLog.committed)
+		r.send(resp)
 	}
 }
 
@@ -1882,9 +1955,9 @@ func (r *raft) restore(s *pb.Snapshot) bool {
 	cs = pb.EnsureConfState(cs)
 
 	for _, set := range [][]uint64{
-		cs.Voters,
-		cs.Learners,
-		cs.VotersOutgoing,
+		cs.GetVoters(),
+		cs.GetLearners(),
+		cs.GetVotersOutgoing(),
 		// `LearnersNext` doesn't need to be checked. According to the rules, if a peer in
 		// `LearnersNext`, it has to be in `VotersOutgoing`.
 	} {
@@ -1957,9 +2030,9 @@ func (r *raft) applyConfChange(cc *pb.ConfChangeV2) *pb.ConfState {
 		if cc.LeaveJoint() {
 			return changer.LeaveJoint()
 		} else if autoLeave, ok := cc.EnterJoint(); ok {
-			return changer.EnterJoint(autoLeave, cc.Changes...)
+			return changer.EnterJoint(autoLeave, cc.GetChanges()...)
 		}
-		return changer.Simple(cc.Changes...)
+		return changer.Simple(cc.GetChanges()...)
 	}()
 
 	if err != nil {
@@ -2007,7 +2080,7 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) *pb.C
 
 	// The remaining steps only make sense if this node is the leader and there
 	// are other nodes.
-	if r.state != StateLeader || len(cs.Voters) == 0 {
+	if r.state != StateLeader || len(cs.GetVoters()) == 0 {
 		return cs
 	}
 
@@ -2055,7 +2128,10 @@ func (r *raft) resetRandomizedElectionTimeout() {
 }
 
 func (r *raft) sendTimeoutNow(to uint64) {
-	r.send(&pb.Message{To: new(to), Type: pb.MsgTimeoutNow.Enum()})
+	m := &pb.Message{}
+	m.SetTo(to)
+	m.SetType(pb.MsgTimeoutNow)
+	r.send(m)
 }
 
 func (r *raft) abortLeaderTransfer() {
@@ -2079,12 +2155,12 @@ func (r *raft) responseToReadIndexReq(req *pb.Message, readIndex uint64) *pb.Mes
 		})
 		return &pb.Message{}
 	}
-	return &pb.Message{
-		Type:    pb.MsgReadIndexResp.Enum(),
-		To:      req.From,
-		Index:   new(readIndex),
-		Entries: req.GetEntries(),
-	}
+	resp := &pb.Message{}
+	resp.SetType(pb.MsgReadIndexResp)
+	resp.SetTo(req.GetFrom())
+	resp.SetIndex(readIndex)
+	resp.SetEntries(req.GetEntries())
+	return resp
 }
 
 // increaseUncommittedSize computes the size of the proposed entries and

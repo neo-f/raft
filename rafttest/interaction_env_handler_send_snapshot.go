@@ -38,13 +38,13 @@ func (env *InteractionEnv) SendSnapshot(fromIdx, toIdx int) error {
 	}
 	from, to := uint64(fromIdx+1), uint64(toIdx+1)
 	fromStatus := env.Nodes[fromIdx].BasicStatus()
-	msg := &raftpb.Message{
+	msg := raftpb.Message_builder{
 		Type:     raftpb.MsgSnap.Enum(),
 		Term:     new(fromStatus.GetTerm()),
 		From:     new(from),
 		To:       new(to),
 		Snapshot: snap,
-	}
+	}.Build()
 	env.Messages = append(env.Messages, msg)
 	_, _ = env.Output.WriteString(raft.DescribeMessage(msg, nil))
 	return nil

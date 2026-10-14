@@ -146,13 +146,13 @@ func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
 
 // ConfState returns a ConfState representing the active configuration.
 func (p *ProgressTracker) ConfState() *pb.ConfState {
-	return &pb.ConfState{
+	return pb.ConfState_builder{
 		Voters:         p.Voters[0].Slice(),
 		VotersOutgoing: p.Voters[1].Slice(),
 		Learners:       quorum.MajorityConfig(p.Learners).Slice(),
 		LearnersNext:   quorum.MajorityConfig(p.LearnersNext).Slice(),
 		AutoLeave:      new(p.AutoLeave),
-	}
+	}.Build()
 }
 
 // IsSingleton returns true if (and only if) there is only one voting member

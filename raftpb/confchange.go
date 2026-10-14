@@ -56,13 +56,13 @@ func MarshalConfChange(c ConfChangeI) (EntryType, []byte, error) {
 
 // AsV2 returns a V2 configuration change carrying out the same operation.
 func (c *ConfChange) AsV2() *ConfChangeV2 {
-	return &ConfChangeV2{
-		Changes: []*ConfChangeSingle{{
+	return ConfChangeV2_builder{
+		Changes: []*ConfChangeSingle{ConfChangeSingle_builder{
 			Type:   c.GetType().Enum(),
 			NodeId: new(c.GetNodeId()),
-		}},
-		Context: c.Context,
-	}
+		}.Build()},
+		Context: c.GetContext(),
+	}.Build()
 }
 
 // AsV1 returns the ConfChange and true.
@@ -88,7 +88,7 @@ func (c *ConfChangeV2) EnterJoint() (autoLeave bool, ok bool) {
 	// base config (i.e. two voters are turned into learners in the process of
 	// applying the conf change). In practice, these distinctions should not
 	// matter, so we keep it simple and use Joint Consensus liberally.
-	if c.GetTransition() != ConfChangeTransitionAuto || len(c.Changes) > 1 {
+	if c.GetTransition() != ConfChangeTransitionAuto || len(c.GetChanges()) > 1 {
 		// Use Joint Consensus.
 		var autoLeave bool
 		switch c.GetTransition() {
@@ -132,13 +132,13 @@ func ConfChangesFromString(s string) ([]*ConfChangeSingle, error) {
 		cc := &ConfChangeSingle{}
 		switch tok[0] {
 		case 'v':
-			cc.Type = ConfChangeAddNode.Enum()
+			cc.SetType(ConfChangeAddNode)
 		case 'l':
-			cc.Type = ConfChangeAddLearnerNode.Enum()
+			cc.SetType(ConfChangeAddLearnerNode)
 		case 'r':
-			cc.Type = ConfChangeRemoveNode.Enum()
+			cc.SetType(ConfChangeRemoveNode)
 		case 'u':
-			cc.Type = ConfChangeUpdateNode.Enum()
+			cc.SetType(ConfChangeUpdateNode)
 		default:
 			return nil, fmt.Errorf("unknown input: %s", tok)
 		}
@@ -146,7 +146,7 @@ func ConfChangesFromString(s string) ([]*ConfChangeSingle, error) {
 		if err != nil {
 			return nil, err
 		}
-		cc.NodeId = new(id)
+		cc.SetNodeId(id)
 		ccs = append(ccs, cc)
 	}
 	return ccs, nil

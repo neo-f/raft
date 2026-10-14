@@ -52,13 +52,13 @@ func toConfChangeSingle(cs *pb.ConfState) (out []*pb.ConfChangeSingle, in []*pb.
 	//
 	// as desired.
 
-	for _, id := range cs.VotersOutgoing {
+	for _, id := range cs.GetVotersOutgoing() {
 		// If there are outgoing voters, first add them one by one so that the
 		// (non-joint) config has them all.
-		out = append(out, &pb.ConfChangeSingle{
+		out = append(out, pb.ConfChangeSingle_builder{
 			Type:   pb.ConfChangeAddNode.Enum(),
 			NodeId: new(id),
-		})
+		}.Build())
 
 	}
 
@@ -66,32 +66,32 @@ func toConfChangeSingle(cs *pb.ConfState) (out []*pb.ConfChangeSingle, in []*pb.
 	// (which will apply on top of the config created by the outgoing slice).
 
 	// First, we'll remove all of the outgoing voters.
-	for _, id := range cs.VotersOutgoing {
-		in = append(in, &pb.ConfChangeSingle{
+	for _, id := range cs.GetVotersOutgoing() {
+		in = append(in, pb.ConfChangeSingle_builder{
 			Type:   pb.ConfChangeRemoveNode.Enum(),
 			NodeId: new(id),
-		})
+		}.Build())
 	}
 	// Then we'll add the incoming voters and learners.
-	for _, id := range cs.Voters {
-		in = append(in, &pb.ConfChangeSingle{
+	for _, id := range cs.GetVoters() {
+		in = append(in, pb.ConfChangeSingle_builder{
 			Type:   pb.ConfChangeAddNode.Enum(),
 			NodeId: new(id),
-		})
+		}.Build())
 	}
-	for _, id := range cs.Learners {
-		in = append(in, &pb.ConfChangeSingle{
+	for _, id := range cs.GetLearners() {
+		in = append(in, pb.ConfChangeSingle_builder{
 			Type:   pb.ConfChangeAddLearnerNode.Enum(),
 			NodeId: new(id),
-		})
+		}.Build())
 	}
 	// Same for LearnersNext; these are nodes we want to be learners but which
 	// are currently voters in the outgoing config.
-	for _, id := range cs.LearnersNext {
-		in = append(in, &pb.ConfChangeSingle{
+	for _, id := range cs.GetLearnersNext() {
+		in = append(in, pb.ConfChangeSingle_builder{
 			Type:   pb.ConfChangeAddLearnerNode.Enum(),
 			NodeId: new(id),
-		})
+		}.Build())
 	}
 	return out, in
 }

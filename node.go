@@ -385,7 +385,7 @@ func (n *node) run() {
 		// Currently it is dropped in Step silently.
 		case pm := <-propc:
 			m := pm.m
-			m.From = new(r.id)
+			m.SetFrom(r.id)
 			err := r.Step(m)
 			if pm.result != nil {
 				pm.result <- err
@@ -411,7 +411,7 @@ func (n *node) run() {
 			// very sound and likely has bugs.
 			if _, okAfter := r.trk.Progress[r.id]; okBefore && !okAfter {
 				var found bool
-				for _, sl := range [][]uint64{cs.Voters, cs.VotersOutgoing} {
+				for _, sl := range [][]uint64{cs.GetVoters(), cs.GetVotersOutgoing()} {
 					for _, id := range sl {
 						if id == r.id {
 							found = true
@@ -465,11 +465,20 @@ func (n *node) Tick() {
 }
 
 func (n *node) Campaign(ctx context.Context) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgHup.Enum()})
+	m := &pb.Message{}
+	m.SetType(pb.MsgHup)
+	return n.step(ctx, m)
 }
 
 func (n *node) Propose(ctx context.Context, data []byte) error {
-	return n.stepWait(ctx, &pb.Message{Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{{Data: data}}})
+	e := &pb.Entry{}
+	if data != nil {
+		e.SetData(data)
+	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgProp)
+	m.SetEntries([]*pb.Entry{e})
+	return n.stepWait(ctx, m)
 }
 
 func (n *node) Step(ctx context.Context, m *pb.Message) error {
@@ -490,7 +499,15 @@ func confChangeToMsg(c pb.ConfChangeI) (*pb.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Message{Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{{Type: typ.Enum(), Data: data}}}, nil
+	e := &pb.Entry{}
+	e.SetType(typ)
+	if data != nil {
+		e.SetData(data)
+	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgProp)
+	m.SetEntries([]*pb.Entry{e})
+	return m, nil
 }
 
 func (n *node) ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error {
@@ -583,8 +600,11 @@ func (n *node) Status() Status {
 }
 
 func (n *node) ReportUnreachable(id uint64) {
+	m := &pb.Message{}
+	m.SetType(pb.MsgUnreachable)
+	m.SetFrom(id)
 	select {
-	case n.recvc <- &pb.Message{Type: pb.MsgUnreachable.Enum(), From: new(id)}:
+	case n.recvc <- m:
 	case <-n.done:
 	}
 }
@@ -592,25 +612,42 @@ func (n *node) ReportUnreachable(id uint64) {
 func (n *node) ReportSnapshot(id uint64, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
+	m := &pb.Message{}
+	m.SetType(pb.MsgSnapStatus)
+	m.SetFrom(id)
+	m.SetReject(rej)
 	select {
-	case n.recvc <- &pb.Message{Type: pb.MsgSnapStatus.Enum(), From: new(id), Reject: new(rej)}:
+	case n.recvc <- m:
 	case <-n.done:
 	}
 }
 
 func (n *node) TransferLeadership(ctx context.Context, lead, transferee uint64) {
+	m := &pb.Message{}
+	m.SetType(pb.MsgTransferLeader)
+	m.SetFrom(transferee)
+	m.SetTo(lead)
 	select {
 	// manually set 'from' and 'to', so that leader can voluntarily transfers its leadership
-	case n.recvc <- &pb.Message{Type: pb.MsgTransferLeader.Enum(), From: new(transferee), To: new(lead)}:
+	case n.recvc <- m:
 	case <-n.done:
 	case <-ctx.Done():
 	}
 }
 
 func (n *node) ForgetLeader(ctx context.Context) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgForgetLeader.Enum()})
+	m := &pb.Message{}
+	m.SetType(pb.MsgForgetLeader)
+	return n.step(ctx, m)
 }
 
 func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgReadIndex.Enum(), Entries: []*pb.Entry{{Data: rctx}}})
+	e := &pb.Entry{}
+	if rctx != nil {
+		e.SetData(rctx)
+	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgReadIndex)
+	m.SetEntries([]*pb.Entry{e})
+	return n.step(ctx, m)
 }

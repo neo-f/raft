@@ -31,18 +31,15 @@ func (cs *ConfState) Equivalent(cs2 *ConfState) error {
 	cs1v := proto.Clone(cs).(*ConfState)
 	cs2v := proto.Clone(cs2).(*ConfState)
 
-	s := func(sl *[]uint64) {
-		slices.Sort(*sl)
-	}
 	for _, c := range []*ConfState{cs1v, cs2v} {
-		s(&c.Voters)
-		s(&c.Learners)
-		s(&c.VotersOutgoing)
-		s(&c.LearnersNext)
+		slices.Sort(c.GetVoters())
+		slices.Sort(c.GetLearners())
+		slices.Sort(c.GetVotersOutgoing())
+		slices.Sort(c.GetLearnersNext())
 
 		// Treat nil AutoLeave as false.
 		autoLeave := c.GetAutoLeave()
-		c.AutoLeave = &autoLeave
+		c.SetAutoLeave(autoLeave)
 	}
 
 	if !proto.Equal(cs1v, cs2v) {
