@@ -54,7 +54,7 @@ func (env *InteractionEnv) ProcessApplyThread(idx int) error {
 	n.ApplyWork = n.ApplyWork[1:]
 
 	resps := m.GetResponses()
-	m.Responses = nil
+	m.SetResponses(nil)
 	env.Output.WriteString("Processing:\n")
 	env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
 	if err := processApply(n, m.GetEntries()); err != nil {
@@ -79,7 +79,7 @@ func processApply(n *Node, ents []*raftpb.Entry) error {
 			if err := proto.Unmarshal(ent.GetData(), cc); err != nil {
 				return err
 			}
-			update = cc.Context
+			update = cc.GetContext()
 			cs = n.RawNode.ApplyConfChange(cc)
 		case raftpb.EntryConfChangeV2:
 			cc := &raftpb.ConfChangeV2{}
@@ -87,7 +87,7 @@ func processApply(n *Node, ents []*raftpb.Entry) error {
 				return err
 			}
 			cs = n.RawNode.ApplyConfChange(cc)
-			update = cc.Context
+			update = cc.GetContext()
 		default:
 			update = ent.GetData()
 		}
@@ -96,16 +96,16 @@ func processApply(n *Node, ents []*raftpb.Entry) error {
 		// the command.
 		lastSnap := n.History[len(n.History)-1]
 		snap := raftpb.EnsureSnapshot(nil)
-		snap.Data = append(snap.Data, lastSnap.Data...)
+		snap.SetData(append(snap.GetData(), lastSnap.GetData()...))
 		// NB: this hard-codes an "appender" state machine.
-		snap.Data = append(snap.Data, update...)
-		snap.Metadata.Index = new(ent.GetIndex())
-		snap.Metadata.Term = new(ent.GetTerm())
+		snap.SetData(append(snap.GetData(), update...))
+		snap.GetMetadata().SetIndex(ent.GetIndex())
+		snap.GetMetadata().SetTerm(ent.GetTerm())
 		if cs == nil {
 			sl := n.History
 			cs = sl[len(sl)-1].GetMetadata().GetConfState()
 		}
-		snap.Metadata.ConfState = cs
+		snap.GetMetadata().SetConfState(cs)
 		n.History = append(n.History, snap)
 	}
 	return nil

@@ -147,7 +147,7 @@ func TestStorageCompact(t *testing.T) {
 
 func TestStorageCreateSnapshot(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := pb.ConfState_builder{Voters: []uint64{1, 2, 3}}.Build()
 	data := []byte("data")
 
 	tests := []struct {
@@ -156,8 +156,8 @@ func TestStorageCreateSnapshot(t *testing.T) {
 		werr  error
 		wsnap *pb.Snapshot
 	}{
-		{4, nil, &pb.Snapshot{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: &pb.ConfState{Voters: []uint64{1, 2, 3}}}}},
-		{5, nil, &pb.Snapshot{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(5)), Term: new(uint64(5)), ConfState: &pb.ConfState{Voters: []uint64{1, 2, 3}}}}},
+		{4, nil, pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: pb.ConfState_builder{Voters: []uint64{1, 2, 3}}.Build()}.Build()}.Build()},
+		{5, nil, pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{Index: new(uint64(5)), Term: new(uint64(5)), ConfState: pb.ConfState_builder{Voters: []uint64{1, 2, 3}}.Build()}.Build()}.Build()},
 	}
 
 	for _, tt := range tests {
@@ -228,7 +228,7 @@ func TestStorageAppend(t *testing.T) {
 }
 
 func TestStorageApplySnapshot(t *testing.T) {
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := pb.ConfState_builder{Voters: []uint64{1, 2, 3}}.Build()
 	data := []byte("data")
 
 	testCases := []struct {
@@ -239,22 +239,22 @@ func TestStorageApplySnapshot(t *testing.T) {
 		{
 			name: "normal case",
 			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}},
+				pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}.Build()}.Build(),
 			},
 			expectedError: nil,
 		},
 		{
 			name: "snapshot out of date",
 			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}},
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(3)), Term: new(uint64(3)), ConfState: cs}},
+				pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}.Build()}.Build(),
+				pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{Index: new(uint64(3)), Term: new(uint64(3)), ConfState: cs}.Build()}.Build(),
 			},
 			expectedError: ErrSnapOutOfDate,
 		},
 		{
 			name: "bootstrap with confState",
 			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{ConfState: cs}},
+				pb.Snapshot_builder{Data: data, Metadata: pb.SnapshotMetadata_builder{ConfState: cs}.Build()}.Build(),
 			},
 			expectedError: nil,
 		},

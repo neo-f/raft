@@ -54,11 +54,11 @@ func (*rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// is one that we have in the outgoing config but not the incoming one.
 	ids := conv(rand.Perm(2 * (nVoters + nLearners + nRemovedVoters)))
 
-	cs.Voters = ids[:nVoters]
+	cs.SetVoters(ids[:nVoters])
 	ids = ids[nVoters:]
 
 	if nLearners > 0 {
-		cs.Learners = ids[:nLearners]
+		cs.SetLearners(ids[:nLearners])
 		ids = ids[nLearners:]
 	}
 
@@ -68,18 +68,18 @@ func (*rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// NB: this code avoids creating non-nil empty slices (here and below).
 	nOutgoingRetainedVoters := rand.Intn(nVoters + 1)
 	if nOutgoingRetainedVoters > 0 || nRemovedVoters > 0 {
-		cs.VotersOutgoing = append([]uint64(nil), cs.Voters[:nOutgoingRetainedVoters]...)
-		cs.VotersOutgoing = append(cs.VotersOutgoing, ids[:nRemovedVoters]...)
+		cs.SetVotersOutgoing(append([]uint64(nil), cs.GetVoters()[:nOutgoingRetainedVoters]...))
+		cs.SetVotersOutgoing(append(cs.GetVotersOutgoing(), ids[:nRemovedVoters]...))
 	}
 	// Only outgoing voters that are not also incoming voters can be in
 	// LearnersNext (they represent demotions).
 	if nRemovedVoters > 0 {
 		if nLearnersNext := rand.Intn(nRemovedVoters + 1); nLearnersNext > 0 {
-			cs.LearnersNext = ids[:nLearnersNext]
+			cs.SetLearnersNext(ids[:nLearnersNext])
 		}
 	}
 
-	cs.AutoLeave = new(len(cs.VotersOutgoing) > 0 && rand.Intn(2) == 1)
+	cs.SetAutoLeave(len(cs.GetVotersOutgoing()) > 0 && rand.Intn(2) == 1)
 	return reflect.ValueOf((*rndConfChange)(cs))
 }
 
@@ -99,10 +99,10 @@ func TestRestore(t *testing.T) {
 		chg.Tracker.Progress = trk
 
 		for _, sl := range [][]uint64{
-			cs.Voters,
-			cs.Learners,
-			cs.VotersOutgoing,
-			cs.LearnersNext,
+			cs.GetVoters(),
+			cs.GetLearners(),
+			cs.GetVotersOutgoing(),
+			cs.GetLearnersNext(),
 		} {
 			slices.Sort(sl)
 		}
@@ -123,9 +123,9 @@ func TestRestore(t *testing.T) {
 	// Unit tests.
 	for _, cs := range []*pb.ConfState{
 		{},
-		{Voters: ids(1, 2, 3)},
-		{Voters: ids(1, 2, 3), Learners: ids(4, 5, 6)},
-		{Voters: ids(1, 2, 3), Learners: ids(5), VotersOutgoing: ids(1, 2, 4, 6), LearnersNext: ids(4)},
+		pb.ConfState_builder{Voters: ids(1, 2, 3)}.Build(),
+		pb.ConfState_builder{Voters: ids(1, 2, 3), Learners: ids(4, 5, 6)}.Build(),
+		pb.ConfState_builder{Voters: ids(1, 2, 3), Learners: ids(5), VotersOutgoing: ids(1, 2, 4, 6), LearnersNext: ids(4)}.Build(),
 	} {
 		pb.EnsureConfState(cs)
 		if !f(cs) {

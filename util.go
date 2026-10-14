@@ -97,7 +97,7 @@ func DescribeSoftState(ss SoftState) string {
 func DescribeConfState(state *pb.ConfState) string {
 	return fmt.Sprintf(
 		"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
-		state.Voters, state.VotersOutgoing, state.Learners, state.LearnersNext, state.GetAutoLeave(),
+		state.GetVoters(), state.GetVotersOutgoing(), state.GetLearners(), state.GetLearnersNext(), state.GetAutoLeave(),
 	)
 }
 
@@ -213,7 +213,7 @@ func DescribeEntry(e *pb.Entry, f EntryFormatter) string {
 	formatConfChange := func(cc pb.ConfChangeI) string {
 		// TODO(tbg): give the EntryFormatter a type argument so that it gets
 		// a chance to expose the Context.
-		return pb.ConfChangesToString(cc.AsV2().Changes)
+		return pb.ConfChangesToString(cc.AsV2().GetChanges())
 	}
 
 	var formatted string
@@ -251,8 +251,8 @@ func DescribeConfChange(cc pb.ConfChangeI) string {
 	for _, c := range cv2.GetChanges() {
 		fmt.Fprintf(&b, " changes:{type:%v node_id:%d}", c.GetType(), c.GetNodeId())
 	}
-	if len(cv2.Context) > 0 {
-		fmt.Fprintf(&b, " context:%q", cv2.Context)
+	if len(cv2.GetContext()) > 0 {
+		fmt.Fprintf(&b, " context:%q", cv2.GetContext())
 	}
 	return b.String()
 }

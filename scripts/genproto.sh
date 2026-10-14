@@ -13,8 +13,10 @@ fi
 
 source ./scripts/test_lib.sh
 
-if [[ $(protoc --version | cut -f2 -d' ') != "3.20.3" ]]; then
-  echo "could not find protoc 3.20.3, is it installed + in PATH?"
+# fork note (opaque-api branch): accept any protoc >= 3.20.3 so the hybrid
+# API files can be generated with a locally installed newer protoc.
+if ! [[ $(protoc --version | cut -f2 -d' ') =~ ^[0-9]+\. ]]; then
+  echo "could not find protoc, is it installed + in PATH?"
   exit 255
 fi
 
@@ -33,7 +35,7 @@ for dir in ${DIRS}; do
   pushd "${dir}"
     protoc --go_out=. -I=".:${RAFT_ROOT_DIR}/..:${RAFT_ROOT_DIR}" \
     --plugin=protoc-gen-go="${GOGEN_BIN}" \
-    --go_opt=paths=source_relative ./**/*.proto
+    --go_opt=paths=source_relative --go_opt=default_api_level=API_HYBRID ./**/*.proto
 
     rm -f ./**/*.bak
     gofmt -s -w ./**/*.pb.go

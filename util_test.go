@@ -32,18 +32,18 @@ var testFormatter EntryFormatter = func(data []byte) string {
 }
 
 func TestDescribeEntry(t *testing.T) {
-	entry := &pb.Entry{
+	entry := pb.Entry_builder{
 		Term:  new(uint64(1)),
 		Index: new(uint64(2)),
 		Type:  pb.EntryNormal.Enum(),
 		Data:  []byte("hello\x00world"),
-	}
+	}.Build()
 	require.Equal(t, `1/2 EntryNormal "hello\x00world"`, DescribeEntry(entry, nil))
 	require.Equal(t, "1/2 EntryNormal HELLO\x00WORLD", DescribeEntry(entry, testFormatter))
 }
 
 func TestLimitSize(t *testing.T) {
-	ents := []*pb.Entry{{Index: new(uint64(4)), Term: new(uint64(4))}, {Index: new(uint64(5)), Term: new(uint64(5))}, {Index: new(uint64(6)), Term: new(uint64(6))}}
+	ents := []*pb.Entry{pb.Entry_builder{Index: new(uint64(4)), Term: new(uint64(4))}.Build(), pb.Entry_builder{Index: new(uint64(5)), Term: new(uint64(5))}.Build(), pb.Entry_builder{Index: new(uint64(6)), Term: new(uint64(6))}.Build()}
 	prefix := func(size int) []*pb.Entry {
 		return append([]*pb.Entry{}, ents[:size]...) // protect the original slice
 	}
@@ -147,6 +147,29 @@ func TestIsResponseMsg(t *testing.T) {
 // This property is important because new leaders append an empty entry to their log,
 // and we don't want this to count towards the uncommitted log quota.
 func TestPayloadSizeOfEmptyEntry(t *testing.T) {
-	e := &pb.Entry{Data: nil}
+	e := pb.Entry_builder{Data: nil}.Build()
 	require.Equal(t, 0, int(payloadSize(e)))
+}
+
+// assertMessagesEqual asserts pairwise protobuf equality of two message
+// slices. Generated protobuf messages must not be compared with
+// reflect.DeepEqual (which testify's Equal uses): under the opaque API the
+// internal representation of a message depends on how it was constructed
+// (builder vs. setters), so semantically equal messages can be DeepEqual-false.
+func assertMessagesEqual(t *testing.T, expected, actual []*pb.Message, msgAndArgs ...any) {
+	t.Helper()
+	if !assert.Len(t, actual, len(expected), msgAndArgs...) {
+		return
+	}
+	for i := range expected {
+		if !proto.Equal(expected[i], actual[i]) {
+			t.Errorf("message %d not equal:\nexpected: %v\nactual:   %v", i, expected[i], actual[i])
+		}
+	}
+}
+
+// requireMessageEqual is the single-message variant of assertMessagesEqual.
+func requireMessageEqual(t *testing.T, expected, actual *pb.Message) {
+	t.Helper()
+	require.True(t, proto.Equal(expected, actual), "messages not equal:\nexpected: %v\nactual:   %v", expected, actual)
 }

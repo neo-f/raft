@@ -24,13 +24,13 @@ import (
 )
 
 var (
-	testingSnap = &pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{
+	testingSnap = pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{
 			Index:     new(uint64(11)), // magic number
 			Term:      new(uint64(11)), // magic number
-			ConfState: &pb.ConfState{Voters: []uint64{1, 2}},
-		},
-	}
+			ConfState: pb.ConfState_builder{Voters: []uint64{1, 2}}.Build(),
+		}.Build(),
+	}.Build()
 )
 
 func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
@@ -45,7 +45,7 @@ func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
 	// node 2 needs a snapshot
 	sm.trk.Progress[2].Next = sm.raftLog.firstIndex()
 
-	sm.Step(&pb.Message{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgAppResp.Enum(), Index: new(sm.trk.Progress[2].Next - 1), Reject: new(true)})
+	sm.Step(pb.Message_builder{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgAppResp.Enum(), Index: new(sm.trk.Progress[2].Next - 1), Reject: new(true)}.Build())
 	require.Equal(t, uint64(11), sm.trk.Progress[2].PendingSnapshot)
 }
 
@@ -59,7 +59,7 @@ func TestPendingSnapshotPauseReplication(t *testing.T) {
 
 	sm.trk.Progress[2].BecomeSnapshot(11)
 
-	sm.Step(&pb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{{Data: []byte("somedata")}}})
+	sm.Step(pb.Message_builder{From: new(uint64(1)), To: new(uint64(1)), Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{pb.Entry_builder{Data: []byte("somedata")}.Build()}}.Build())
 	msgs := sm.readMessages()
 	require.Empty(t, msgs)
 }
@@ -75,7 +75,7 @@ func TestSnapshotFailure(t *testing.T) {
 	sm.trk.Progress[2].Next = 1
 	sm.trk.Progress[2].BecomeSnapshot(11)
 
-	sm.Step(&pb.Message{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgSnapStatus.Enum(), Reject: new(true)})
+	sm.Step(pb.Message_builder{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgSnapStatus.Enum(), Reject: new(true)}.Build())
 	require.Zero(t, sm.trk.Progress[2].PendingSnapshot)
 	require.Equal(t, uint64(1), sm.trk.Progress[2].Next)
 	assert.True(t, sm.trk.Progress[2].MsgAppFlowPaused)
@@ -92,7 +92,7 @@ func TestSnapshotSucceed(t *testing.T) {
 	sm.trk.Progress[2].Next = 1
 	sm.trk.Progress[2].BecomeSnapshot(11)
 
-	sm.Step(&pb.Message{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgSnapStatus.Enum(), Reject: new(false)})
+	sm.Step(pb.Message_builder{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgSnapStatus.Enum(), Reject: new(false)}.Build())
 	require.Zero(t, sm.trk.Progress[2].PendingSnapshot)
 	require.Equal(t, uint64(12), sm.trk.Progress[2].Next)
 	assert.True(t, sm.trk.Progress[2].MsgAppFlowPaused)
@@ -111,7 +111,7 @@ func TestSnapshotAbort(t *testing.T) {
 
 	// A successful msgAppResp that has a higher/equal index than the
 	// pending snapshot should abort the pending snapshot.
-	sm.Step(&pb.Message{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgAppResp.Enum(), Index: new(uint64(11))})
+	sm.Step(pb.Message_builder{From: new(uint64(2)), To: new(uint64(1)), Type: pb.MsgAppResp.Enum(), Index: new(uint64(11))}.Build())
 	require.Zero(t, sm.trk.Progress[2].PendingSnapshot)
 	// The follower entered StateReplicate and the leader send an append
 	// and optimistically updated the progress (so we see 13 instead of 12).

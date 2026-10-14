@@ -90,10 +90,10 @@ func TestFindConflictByTerm(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			st := NewMemoryStorage()
 			require.NotEmpty(t, tt.ents)
-			st.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{
+			st.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{
 				Index: new(tt.ents[0].GetIndex()),
 				Term:  new(tt.ents[0].GetTerm()),
-			}})
+			}.Build()}.Build())
 			l := newLog(st, raftLogger)
 			l.append(tt.ents[1:]...)
 
@@ -354,7 +354,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	require.Equal(t, uint64(751), unstableEnts[0].GetIndex())
 
 	prev := raftLog.lastIndex()
-	raftLog.append(&pb.Entry{Index: new(raftLog.lastIndex() + 1), Term: new(raftLog.lastIndex() + 1)})
+	raftLog.append(pb.Entry_builder{Index: new(raftLog.lastIndex() + 1), Term: new(raftLog.lastIndex() + 1)}.Build())
 	require.Equal(t, prev+1, raftLog.lastIndex())
 
 	ents, err := raftLog.entries(raftLog.lastIndex(), noLimit)
@@ -363,9 +363,9 @@ func TestCompactionSideEffects(t *testing.T) {
 }
 
 func TestHasNextCommittedEnts(t *testing.T) {
-	snap := &pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Term: new(uint64(1)), Index: new(uint64(3))},
-	}
+	snap := pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Term: new(uint64(1)), Index: new(uint64(3))}.Build(),
+	}.Build()
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
 		applied       uint64
@@ -408,7 +408,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index = new(newSnap.GetMetadata().GetIndex() + 1)
+				newSnap.GetMetadata().SetIndex(newSnap.GetMetadata().GetIndex() + 1)
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.whasNext, raftLog.hasNextCommittedEnts(tt.allowUnstable))
@@ -417,9 +417,9 @@ func TestHasNextCommittedEnts(t *testing.T) {
 }
 
 func TestNextCommittedEnts(t *testing.T) {
-	snap := &pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Term: new(uint64(1)), Index: new(uint64(3))},
-	}
+	snap := pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Term: new(uint64(1)), Index: new(uint64(3))}.Build(),
+	}.Build()
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
 		applied       uint64
@@ -462,7 +462,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index = new(newSnap.GetMetadata().GetIndex() + 1)
+				newSnap.GetMetadata().SetIndex(newSnap.GetMetadata().GetIndex() + 1)
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.wents, raftLog.nextCommittedEnts(tt.allowUnstable))
@@ -472,9 +472,9 @@ func TestNextCommittedEnts(t *testing.T) {
 
 func TestAcceptApplying(t *testing.T) {
 	maxSize := entryEncodingSize(100)
-	snap := &pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Term: new(uint64(1)), Index: new(uint64(3))},
-	}
+	snap := pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Term: new(uint64(1)), Index: new(uint64(3))}.Build(),
+	}.Build()
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
 		index         uint64
@@ -523,9 +523,9 @@ func TestAcceptApplying(t *testing.T) {
 func TestAppliedTo(t *testing.T) {
 	maxSize := entryEncodingSize(100)
 	overshoot := entryEncodingSize(5)
-	snap := &pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Term: new(uint64(1)), Index: new(uint64(3))},
-	}
+	snap := pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Term: new(uint64(1)), Index: new(uint64(3))}.Build(),
+	}.Build()
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
 		index         uint64
@@ -678,7 +678,7 @@ func TestStableToWithSnap(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			s := NewMemoryStorage()
-			require.NoError(t, s.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(snapi), Term: new(snapt)}}))
+			require.NoError(t, s.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(snapi), Term: new(snapt)}.Build()}.Build()))
 			raftLog := newLog(s, raftLogger)
 			raftLog.append(tt.newEnts...)
 			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
@@ -731,7 +731,7 @@ func TestLogRestore(t *testing.T) {
 	index := uint64(1000)
 	term := uint64(1000)
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(index), Term: new(term)}})
+	storage.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(index), Term: new(term)}.Build()}.Build())
 	raftLog := newLog(storage, raftLogger)
 
 	require.Zero(t, len(raftLog.allEntries()))
@@ -745,7 +745,7 @@ func TestIsOutOfBounds(t *testing.T) {
 	offset := uint64(100)
 	num := uint64(100)
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(offset)}})
+	storage.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(offset)}.Build()}.Build())
 	l := newLog(storage, raftLogger)
 	l.append(index(offset+1).termRange(offset+1, offset+num+1)...)
 
@@ -817,7 +817,7 @@ func TestTerm(t *testing.T) {
 	num := uint64(100)
 
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(offset), Term: new(uint64(1))}})
+	storage.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(offset), Term: new(uint64(1))}.Build()}.Build())
 	l := newLog(storage, raftLogger)
 	l.append(index(offset+1).termRange(1, num)...)
 
@@ -845,9 +845,9 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	unstablesnapi := storagesnapi + 5
 
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(storagesnapi), Term: new(uint64(1))}})
+	storage.ApplySnapshot(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(storagesnapi), Term: new(uint64(1))}.Build()}.Build())
 	l := newLog(storage, raftLogger)
-	l.restore(&pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(unstablesnapi), Term: new(uint64(1))}})
+	l.restore(pb.Snapshot_builder{Metadata: pb.SnapshotMetadata_builder{Index: new(unstablesnapi), Term: new(uint64(1))}.Build()}.Build())
 
 	for i, tt := range []struct {
 		idx  uint64
@@ -877,15 +877,15 @@ func TestSlice(t *testing.T) {
 	num := uint64(100)
 	last := offset + num
 	half := offset + num/2
-	halfe := &pb.Entry{Index: new(half), Term: new(half), Type: pb.EntryNormal.Enum()}
+	halfe := pb.Entry_builder{Index: new(half), Term: new(half), Type: pb.EntryNormal.Enum()}.Build()
 
 	entries := func(from, to uint64) []*pb.Entry {
 		return index(from).termRange(from, to)
 	}
 
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.ApplySnapshot(&pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Index: new(offset)}}))
+	require.NoError(t, storage.ApplySnapshot(pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Index: new(offset)}.Build()}.Build()))
 	require.NoError(t, storage.Append(entries(offset+1, half)))
 	l := newLog(storage, raftLogger)
 	l.append(entries(half, last)...)
@@ -970,8 +970,8 @@ func TestScan(t *testing.T) {
 	entrySize := entsSize(entries(half, half+1))
 
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.ApplySnapshot(&pb.Snapshot{
-		Metadata: &pb.SnapshotMetadata{Index: new(offset)}}))
+	require.NoError(t, storage.ApplySnapshot(pb.Snapshot_builder{
+		Metadata: pb.SnapshotMetadata_builder{Index: new(offset)}.Build()}.Build()))
 	require.NoError(t, storage.Append(entries(offset+1, half)))
 	l := newLog(storage, raftLogger)
 	l.append(entries(half, last)...)
@@ -1030,7 +1030,7 @@ func (i index) terms(terms ...uint64) []*pb.Entry {
 	index := uint64(i)
 	entries := make([]*pb.Entry, 0, len(terms))
 	for _, term := range terms {
-		entries = append(entries, &pb.Entry{Term: new(term), Index: new(index)})
+		entries = append(entries, pb.Entry_builder{Term: new(term), Index: new(index)}.Build())
 		index++
 	}
 	return entries
@@ -1042,7 +1042,7 @@ func (i index) termRange(from, to uint64) []*pb.Entry {
 	index := uint64(i)
 	entries := make([]*pb.Entry, 0, to-from)
 	for term := from; term < to; term++ {
-		entries = append(entries, &pb.Entry{Term: new(term), Index: new(index), Type: pb.EntryNormal.Enum()})
+		entries = append(entries, pb.Entry_builder{Term: new(term), Index: new(index), Type: pb.EntryNormal.Enum()}.Build())
 		index++
 	}
 	return entries

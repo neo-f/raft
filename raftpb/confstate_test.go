@@ -28,26 +28,26 @@ func TestConfState_Equivalent(t *testing.T) {
 
 	testCases := []testCase{
 		// Reordered voters and learners.
-		{&ConfState{
+		{ConfState_builder{
 			Voters:         []uint64{1, 2, 3},
 			Learners:       []uint64{5, 4, 6},
 			VotersOutgoing: []uint64{9, 8, 7},
 			LearnersNext:   []uint64{10, 20, 15},
-		}, &ConfState{
+		}.Build(), ConfState_builder{
 			Voters:         []uint64{1, 2, 3},
 			Learners:       []uint64{4, 5, 6},
 			VotersOutgoing: []uint64{7, 9, 8},
 			LearnersNext:   []uint64{20, 10, 15},
-		}, true},
+		}.Build(), true},
 		// Not sensitive to nil vs empty slice.
-		{&ConfState{Voters: []uint64{}}, &ConfState{Voters: []uint64(nil)}, true},
+		{ConfState_builder{Voters: []uint64{}}.Build(), ConfState_builder{}.Build(), true},
 		// Non-equivalent voters.
-		{&ConfState{Voters: []uint64{1, 2, 3, 4}}, &ConfState{Voters: []uint64{2, 1, 3}}, false},
-		{&ConfState{Voters: []uint64{1, 4, 3}}, &ConfState{Voters: []uint64{2, 1, 3}}, false},
+		{ConfState_builder{Voters: []uint64{1, 2, 3, 4}}.Build(), ConfState_builder{Voters: []uint64{2, 1, 3}}.Build(), false},
+		{ConfState_builder{Voters: []uint64{1, 4, 3}}.Build(), ConfState_builder{Voters: []uint64{2, 1, 3}}.Build(), false},
 		// Non-equivalent learners.
-		{&ConfState{Voters: []uint64{1, 2, 3, 4}}, &ConfState{Voters: []uint64{2, 1, 3}}, false},
+		{ConfState_builder{Voters: []uint64{1, 2, 3, 4}}.Build(), ConfState_builder{Voters: []uint64{2, 1, 3}}.Build(), false},
 		// Sensitive to AutoLeave flag.
-		{&ConfState{AutoLeave: new(true)}, &ConfState{}, false},
+		{ConfState_builder{AutoLeave: new(true)}.Build(), ConfState_builder{}.Build(), false},
 	}
 
 	for _, tc := range testCases {

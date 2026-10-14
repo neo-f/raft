@@ -81,18 +81,22 @@ func (rn *RawNode) TickQuiesced() {
 
 // Campaign causes this RawNode to transition to candidate state.
 func (rn *RawNode) Campaign() error {
-	return rn.raft.Step(&pb.Message{
-		Type: pb.MsgHup.Enum(),
-	})
+	m := &pb.Message{}
+	m.SetType(pb.MsgHup)
+	return rn.raft.Step(m)
 }
 
 // Propose proposes data be appended to the raft log.
 func (rn *RawNode) Propose(data []byte) error {
-	return rn.raft.Step(&pb.Message{
-		Type:    pb.MsgProp.Enum(),
-		From:    new(rn.raft.id),
-		Entries: []*pb.Entry{{Data: data}},
-	})
+	e := &pb.Entry{}
+	if data != nil {
+		e.SetData(data)
+	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgProp)
+	m.SetFrom(rn.raft.id)
+	m.SetEntries([]*pb.Entry{e})
+	return rn.raft.Step(m)
 }
 
 // ProposeConfChange proposes a config change. See (Node).ProposeConfChange for
@@ -221,12 +225,11 @@ func needStorageAppendRespMsg(r *raft, rd Ready) bool {
 // that should be delivered after the rest of the message is processed. Used
 // with AsyncStorageWrites.
 func newStorageAppendMsg(r *raft, rd Ready) *pb.Message {
-	m := &pb.Message{
-		Type:    pb.MsgStorageAppend.Enum(),
-		To:      new(LocalAppendThread),
-		From:    new(r.id),
-		Entries: rd.Entries,
-	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgStorageAppend)
+	m.SetTo(LocalAppendThread)
+	m.SetFrom(r.id)
+	m.SetEntries(rd.Entries)
 	if !IsEmptyHardState(rd.HardState) {
 		// If the Ready includes a HardState update, assign each of its fields
 		// to the corresponding fields in the Message. This allows clients to
@@ -235,12 +238,12 @@ func newStorageAppendMsg(r *raft, rd Ready) *pb.Message {
 		// If the Ready does not include a HardState update, make sure to not
 		// assign a value to any of the fields so that a HardState reconstructed
 		// from them will be empty (return true from raft.IsEmptyHardState).
-		m.Term = new(rd.GetTerm())
-		m.Vote = new(rd.GetVote())
-		m.Commit = new(rd.GetCommit())
+		m.SetTerm(rd.GetTerm())
+		m.SetVote(rd.GetVote())
+		m.SetCommit(rd.GetCommit())
 	}
 	if !IsEmptySnap(rd.Snapshot) {
-		m.Snapshot = rd.Snapshot
+		m.SetSnapshot(rd.Snapshot)
 	}
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
 	// the message is processed, along with a self-directed MsgStorageAppendResp
@@ -251,10 +254,10 @@ func newStorageAppendMsg(r *raft, rd Ready) *pb.Message {
 	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
-	m.Responses = r.msgsAfterAppend
+	m.SetResponses(r.msgsAfterAppend)
 	if needStorageAppendRespMsg(r, rd) {
 		resp := newStorageAppendRespMsg(r, rd)
-		m.Responses = append(m.GetResponses(), resp)
+		m.SetResponses(append(m.GetResponses(), resp))
 	}
 	return m
 }
@@ -264,13 +267,12 @@ func newStorageAppendMsg(r *raft, rd Ready) *pb.Message {
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
 func newStorageAppendRespMsg(r *raft, rd Ready) *pb.Message {
-	m := &pb.Message{
-		Type: pb.MsgStorageAppendResp.Enum(),
-		To:   new(r.id),
-		From: new(LocalAppendThread),
-		// Dropped after term change, see below.
-		Term: new(r.Term),
-	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgStorageAppendResp)
+	m.SetTo(r.id)
+	m.SetFrom(LocalAppendThread)
+	// Dropped after term change, see below.
+	m.SetTerm(r.Term)
 	if r.raftLog.hasNextOrInProgressUnstableEnts() {
 		// If the raft log has unstable entries, attach the last index and term of the
 		// append to the response message. This (index, term) tuple will be handed back
@@ -353,11 +355,11 @@ func newStorageAppendRespMsg(r *raft, rd Ready) *pb.Message {
 		//
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
 		last := r.raftLog.lastEntryID()
-		m.Index = new(last.index)
-		m.LogTerm = new(last.term)
+		m.SetIndex(last.index)
+		m.SetLogTerm(last.term)
 	}
 	if !IsEmptySnap(rd.Snapshot) {
-		m.Snapshot = rd.Snapshot
+		m.SetSnapshot(rd.Snapshot)
 	}
 	return m
 }
@@ -371,27 +373,27 @@ func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
 // message is processed. Used with AsyncStorageWrites.
 func newStorageApplyMsg(r *raft, rd Ready) *pb.Message {
 	ents := rd.CommittedEntries
-	return &pb.Message{
-		Type:      pb.MsgStorageApply.Enum(),
-		To:        new(LocalApplyThread),
-		From:      new(r.id),
-		Term:      new(uint64(0)), // committed entries don't apply under a specific term
-		Entries:   ents,
-		Responses: []*pb.Message{newStorageApplyRespMsg(r, ents)},
-	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgStorageApply)
+	m.SetTo(LocalApplyThread)
+	m.SetFrom(r.id)
+	m.SetTerm(0) // committed entries don't apply under a specific term
+	m.SetEntries(ents)
+	m.SetResponses([]*pb.Message{newStorageApplyRespMsg(r, ents)})
+	return m
 }
 
 // newStorageApplyRespMsg creates the message that should be returned to node
 // after the committed entries in the current Ready (along with those in all
 // prior Ready structs) have been applied to the local state machine.
 func newStorageApplyRespMsg(r *raft, ents []*pb.Entry) *pb.Message {
-	return &pb.Message{
-		Type:    pb.MsgStorageApplyResp.Enum(),
-		To:      new(r.id),
-		From:    new(LocalApplyThread),
-		Term:    new(uint64(0)), // committed entries don't apply under a specific term
-		Entries: ents,
-	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgStorageApplyResp)
+	m.SetTo(r.id)
+	m.SetFrom(LocalApplyThread)
+	m.SetTerm(0) // committed entries don't apply under a specific term
+	m.SetEntries(ents)
+	return m
 }
 
 // acceptReady is called when the consumer of the RawNode has decided to go
@@ -527,25 +529,37 @@ func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tra
 
 // ReportUnreachable reports the given node is not reachable for the last send.
 func (rn *RawNode) ReportUnreachable(id uint64) {
-	_ = rn.raft.Step(&pb.Message{Type: pb.MsgUnreachable.Enum(), From: new(id)})
+	m := &pb.Message{}
+	m.SetType(pb.MsgUnreachable)
+	m.SetFrom(id)
+	_ = rn.raft.Step(m)
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
 func (rn *RawNode) ReportSnapshot(id uint64, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
-	_ = rn.raft.Step(&pb.Message{Type: pb.MsgSnapStatus.Enum(), From: new(id), Reject: new(rej)})
+	m := &pb.Message{}
+	m.SetType(pb.MsgSnapStatus)
+	m.SetFrom(id)
+	m.SetReject(rej)
+	_ = rn.raft.Step(m)
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
 func (rn *RawNode) TransferLeader(transferee uint64) {
-	_ = rn.raft.Step(&pb.Message{Type: pb.MsgTransferLeader.Enum(), From: new(transferee)})
+	m := &pb.Message{}
+	m.SetType(pb.MsgTransferLeader)
+	m.SetFrom(transferee)
+	_ = rn.raft.Step(m)
 }
 
 // ForgetLeader forgets a follower's current leader, changing it to None.
 // See (Node).ForgetLeader for details.
 func (rn *RawNode) ForgetLeader() error {
-	return rn.raft.Step(&pb.Message{Type: pb.MsgForgetLeader.Enum()})
+	m := &pb.Message{}
+	m.SetType(pb.MsgForgetLeader)
+	return rn.raft.Step(m)
 }
 
 // ReadIndex requests a read state. The read state will be set in ready.
@@ -553,5 +567,12 @@ func (rn *RawNode) ForgetLeader() error {
 // index, any linearizable read requests issued before the read request can be
 // processed safely. The read state will have the same rctx attached.
 func (rn *RawNode) ReadIndex(rctx []byte) {
-	_ = rn.raft.Step(&pb.Message{Type: pb.MsgReadIndex.Enum(), Entries: []*pb.Entry{{Data: rctx}}})
+	e := &pb.Entry{}
+	if rctx != nil {
+		e.SetData(rctx)
+	}
+	m := &pb.Message{}
+	m.SetType(pb.MsgReadIndex)
+	m.SetEntries([]*pb.Entry{e})
+	_ = rn.raft.Step(m)
 }

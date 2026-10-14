@@ -36,20 +36,22 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			case "voters":
 				var id uint64
 				arg.Scan(t, i, &id)
-				snap.Metadata.ConfState.Voters = append(snap.Metadata.ConfState.Voters, id)
+				snap.GetMetadata().GetConfState().SetVoters(append(snap.GetMetadata().GetConfState().GetVoters(), id))
 			case "learners":
 				var id uint64
 				arg.Scan(t, i, &id)
-				snap.Metadata.ConfState.Learners = append(snap.Metadata.ConfState.Learners, id)
+				snap.GetMetadata().GetConfState().SetLearners(append(snap.GetMetadata().GetConfState().GetLearners(), id))
 			case "inflight":
 				arg.Scan(t, i, &cfg.MaxInflightMsgs)
 			case "index":
 				var idx uint64
 				arg.Scan(t, i, &idx)
-				snap.Metadata.Index = new(idx)
+				snap.GetMetadata().SetIndex(idx)
 				cfg.Applied = snap.GetMetadata().GetIndex()
 			case "content":
-				arg.Scan(t, i, &snap.Data)
+				var data []byte
+				arg.Scan(t, i, &data)
+				snap.SetData(data)
 			case "async-storage-writes":
 				arg.Scan(t, i, &cfg.AsyncStorageWrites)
 			case "prevote":
@@ -118,7 +120,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap *pb.Snapshot) e
 			if snap.GetMetadata().GetIndex() <= 1 {
 				return errors.New("index must be specified as > 1 due to bootstrap")
 			}
-			snap.Metadata.Term = new(uint64(1))
+			snap.GetMetadata().SetTerm(1)
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}

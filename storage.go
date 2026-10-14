@@ -232,7 +232,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap *pb.Snapshot) error {
 	}
 
 	ms.snapshot = proto.Clone(snap).(*pb.Snapshot)
-	ms.ents = []*pb.Entry{{Term: new(snap.GetMetadata().GetTerm()), Index: new(snap.GetMetadata().GetIndex())}}
+	ms.ents = []*pb.Entry{pb.Entry_builder{Term: new(snap.GetMetadata().GetTerm()), Index: new(snap.GetMetadata().GetIndex())}.Build()}
 	return nil
 }
 
@@ -253,12 +253,16 @@ func (ms *MemoryStorage) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte)
 	}
 
 	ms.snapshot = pb.EnsureSnapshot(ms.snapshot)
-	ms.snapshot.Metadata.Index = new(i)
-	ms.snapshot.Metadata.Term = new(ms.ents[i-offset].GetTerm())
+	ms.snapshot.GetMetadata().SetIndex(i)
+	ms.snapshot.GetMetadata().SetTerm(ms.ents[i-offset].GetTerm())
 	if cs != nil {
-		ms.snapshot.Metadata.ConfState = proto.Clone(cs).(*pb.ConfState)
+		ms.snapshot.GetMetadata().SetConfState(proto.Clone(cs).(*pb.ConfState))
 	}
-	ms.snapshot.Data = data
+	if data != nil {
+		ms.snapshot.SetData(data)
+	} else {
+		ms.snapshot.ClearData()
+	}
 	return proto.Clone(ms.snapshot).(*pb.Snapshot), nil
 }
 
@@ -281,7 +285,9 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 	// ms.ents are immutable, and can be referenced from outside MemoryStorage
 	// through slices returned by ms.Entries().
 	ents := make([]*pb.Entry, 1, uint64(len(ms.ents))-i)
-	ents[0] = &pb.Entry{Index: new(ms.ents[i].GetIndex()), Term: new(ms.ents[i].GetTerm())}
+	ents[0] = &pb.Entry{}
+	ents[0].SetIndex(ms.ents[i].GetIndex())
+	ents[0].SetTerm(ms.ents[i].GetTerm())
 	ents = append(ents, ms.ents[i+1:]...)
 	ms.ents = ents
 	return nil
